@@ -79,28 +79,44 @@
   }
   /* 全体人数（開閉できる内訳） */
   .member-summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    display: block;
     cursor: pointer;
     list-style: none;
     touch-action: manipulation;
-    user-select: none;
   }
   .member-summary::-webkit-details-marker { display: none; }
-  .member-summary .card-title { margin-bottom: 2px; }
+  .member-summary .card-title { margin-bottom: 0; }
+  .summary-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
   .summary-breakdown {
+    margin-top: 6px;
     font-size: 0.72rem;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
+  /* 開いているときは内訳の行そのものが見えるので、要約は隠す */
+  details[open] .summary-breakdown { display: none; }
   .summary-right {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 4px;
     flex-shrink: 0;
   }
+  /* 閉じているとき＝直接入力、開いているとき＝合計の表示のみ */
+  details[open] #totalStepperSlot { display: none; }
+  details:not([open]) .summary-total,
+  details:not([open]) .summary-unit { display: none; }
+  .stepper--total button { width: 38px; height: 38px; font-size: 1.3rem; }
+  .stepper--total input.value {
+    height: 38px;
+    width: 2.7em;
+    font-size: 1.3rem;
+  }
+  .stepper--total .unit { margin-left: -2px; }
   .summary-total {
     font-size: 1.7rem;
     font-weight: 700;
@@ -332,15 +348,17 @@
   <section class="card">
     <details id="memberDetails">
       <summary class="member-summary">
-        <div class="summary-left">
+        <div class="summary-top">
           <div class="card-title">👥 全体の人数</div>
-          <div class="summary-breakdown" id="summaryBreakdown"></div>
+          <div class="summary-right">
+            <!-- 閉じているときだけ出る、全体人数の直接入力 -->
+            <div id="totalStepperSlot"></div>
+            <span class="summary-total" id="summaryTotal">0</span>
+            <span class="unit summary-unit">人</span>
+            <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
         </div>
-        <div class="summary-right">
-          <span class="summary-total" id="summaryTotal">0</span>
-          <span class="unit">人</span>
-          <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
+        <div class="summary-breakdown" id="summaryBreakdown"></div>
       </summary>
       <div class="member-body" id="memberList"></div>
     </details>
@@ -355,7 +373,7 @@
 
   <!-- その他の移動手段 -->
   <section class="card">
-    <div class="card-title">⛵ その他の移動手段</div>
+    <div class="card-title">🚏 その他の移動手段</div>
     <div id="otherList"></div>
   </section>
 
@@ -380,7 +398,7 @@
 
   var defaultState = {
     members: [
-      { key: "player",  name: "プレイヤー",   icon: "🏄", count: 0 },
+      { key: "player",  name: "プレイヤー",   icon: "⛵", count: 0 },
       { key: "manager", name: "マネージャー", icon: "📋", count: 0 },
       { key: "coach",   name: "コーチ",       icon: "📣", count: 0 }
     ],
@@ -406,6 +424,9 @@
             parsed.members[0].count = typeof parsed.total === "number" ? parsed.total : 0;
           }
           delete parsed.total;
+          // 名前とアイコンは常に最新の定義に合わせ、人数だけ引き継ぐ
+          refreshLabels(parsed.members, defaultState.members);
+          refreshLabels(parsed.others, defaultState.others);
           return parsed;
         }
       }
@@ -413,8 +434,37 @@
     return JSON.parse(JSON.stringify(defaultState));
   }
 
+  function refreshLabels(saved, defaults) {
+    if (!Array.isArray(saved)) return;
+    saved.forEach(function (item) {
+      defaults.forEach(function (def) {
+        if (def.key && item.key === def.key) {
+          item.name = def.name;
+          item.icon = def.icon;
+        }
+      });
+    });
+  }
+
   function totalPeople() {
     return state.members.reduce(function (s, m) { return s + m.count; }, 0);
+  }
+
+  // 閉じた状態で全体人数を直接いじったときの配分。
+  // 増えた分はプレイヤーに足し、減った分はプレイヤー→マネージャー→コーチの順に引く。
+  function setTotalPeople(v) {
+    var delta = v - totalPeople();
+    if (delta > 0) {
+      state.members[0].count += delta;
+    } else {
+      var rest = -delta;
+      for (var i = 0; i < state.members.length && rest > 0; i++) {
+        var take = Math.min(state.members[i].count, rest);
+        state.members[i].count -= take;
+        rest -= take;
+      }
+    }
+    renderMembers();
   }
 
   function saveState() {
@@ -604,6 +654,10 @@
     document.getElementById("summaryTotal").textContent = total;
     document.getElementById("summaryBreakdown").textContent =
       state.members.map(function (m) { return m.name + " " + m.count; }).join("・");
+    // 内訳をいじって合計が変わったときも、直接入力欄を合わせておく
+    if (totalStepperInput && document.activeElement !== totalStepperInput) {
+      totalStepperInput.value = total;
+    }
 
     var detail = document.getElementById("resultDetail");
     detail.innerHTML =
@@ -632,6 +686,16 @@
 
     saveState();
   }
+
+  // 閉じているときに出る、全体人数の直接入力。
+  // summary の中にあるので、操作しても details が開閉しないよう伝播を止める。
+  var totalStepper = makeStepper(totalPeople, setTotalPeople, "人", "全体の人数", true);
+  totalStepper.className += " stepper--total";
+  ["click", "keydown"].forEach(function (type) {
+    totalStepper.addEventListener(type, function (e) { e.stopPropagation(); });
+  });
+  document.getElementById("totalStepperSlot").appendChild(totalStepper);
+  var totalStepperInput = totalStepper.querySelector("input.value");
 
   // 車を追加
   document.getElementById("addCarBtn").addEventListener("click", function () {
