@@ -77,14 +77,65 @@
     align-items: center;
     gap: 6px;
   }
-  /* 全体人数 */
-  .total-row {
+  /* 全体人数（開閉できる内訳） */
+  .member-summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    cursor: pointer;
+    list-style: none;
+    touch-action: manipulation;
+    user-select: none;
   }
-  .total-row label { font-size: 0.95rem; font-weight: 600; }
+  .member-summary::-webkit-details-marker { display: none; }
+  .member-summary .card-title { margin-bottom: 2px; }
+  .summary-breakdown {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .summary-right {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .summary-total {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: var(--sea);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .chevron {
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--sea-light);
+    margin-left: 4px;
+    align-self: center;
+    transition: transform 0.2s;
+  }
+  details[open] .chevron { transform: rotate(180deg); }
+  .member-body {
+    margin-top: 12px;
+    padding-top: 4px;
+    border-top: 1px dashed #d7ebf4;
+  }
+  .member-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px dashed #d7ebf4;
+  }
+  .member-row:last-child { border-bottom: none; }
+  .member-name {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 0.95rem;
+  }
+  .member-name .icon { font-size: 1.2rem; }
   .stepper {
     display: flex;
     align-items: center;
@@ -278,16 +329,20 @@
 <main>
   <!-- 全体人数 -->
   <section class="card">
-    <div class="card-title">👥 全体の人数</div>
-    <div class="total-row">
-      <label for="totalInput">参加人数</label>
-      <div class="stepper">
-        <button type="button" class="minus" data-action="total-minus" aria-label="人数を減らす">−</button>
-        <input class="value" id="totalInput" type="number" inputmode="numeric" min="0" value="0" aria-label="全体の人数">
-        <button type="button" data-action="total-plus" aria-label="人数を増やす">＋</button>
-        <span class="unit">人</span>
-      </div>
-    </div>
+    <details id="memberDetails">
+      <summary class="member-summary">
+        <div class="summary-left">
+          <div class="card-title">👥 全体の人数</div>
+          <div class="summary-breakdown" id="summaryBreakdown"></div>
+        </div>
+        <div class="summary-right">
+          <span class="summary-total" id="summaryTotal">0</span>
+          <span class="unit">人</span>
+          <span class="chevron" aria-hidden="true">⌄</span>
+        </div>
+      </summary>
+      <div class="member-body" id="memberList"></div>
+    </details>
   </section>
 
   <!-- 車 -->
@@ -323,7 +378,11 @@
   var STORAGE_KEY = "haisha-tool-v1";
 
   var defaultState = {
-    total: 0,
+    members: [
+      { key: "player",  name: "プレイヤー",   icon: "🏄", count: 0 },
+      { key: "manager", name: "マネージャー", icon: "📋", count: 0 },
+      { key: "coach",   name: "コーチ",       icon: "📣", count: 0 }
+    ],
     cars: [{ name: "車1", capacity: 4 }],
     others: [
       { key: "moped",  name: "原付",   icon: "🛵", count: 0 },
@@ -340,11 +399,21 @@
       if (raw) {
         var parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.cars) && Array.isArray(parsed.others)) {
+          if (!Array.isArray(parsed.members)) {
+            // 内訳を持たない旧データは、全体人数をプレイヤーに移す
+            parsed.members = JSON.parse(JSON.stringify(defaultState.members));
+            parsed.members[0].count = typeof parsed.total === "number" ? parsed.total : 0;
+          }
+          delete parsed.total;
           return parsed;
         }
       }
     } catch (e) {}
     return JSON.parse(JSON.stringify(defaultState));
+  }
+
+  function totalPeople() {
+    return state.members.reduce(function (s, m) { return s + m.count; }, 0);
   }
 
   function saveState() {
@@ -353,11 +422,12 @@
     } catch (e) {}
   }
 
+  var memberList = document.getElementById("memberList");
   var carList = document.getElementById("carList");
   var otherList = document.getElementById("otherList");
-  var totalInput = document.getElementById("totalInput");
 
-  function makeStepper(getValue, setValue, unit) {
+  // editable を渡すと、数字を直接キーボードで打ち込める入力欄になる
+  function makeStepper(getValue, setValue, unit, label, editable) {
     var wrap = document.createElement("div");
     wrap.className = "stepper";
 
@@ -365,30 +435,49 @@
     minus.type = "button";
     minus.className = "minus";
     minus.textContent = "−";
-    minus.setAttribute("aria-label", "減らす");
+    minus.setAttribute("aria-label", label + "を減らす");
 
-    var value = document.createElement("span");
+    var value;
+    if (editable) {
+      value = document.createElement("input");
+      value.type = "number";
+      value.inputMode = "numeric";
+      value.min = "0";
+      value.value = getValue();
+      value.setAttribute("aria-label", label);
+      value.addEventListener("input", function () {
+        var v = parseInt(value.value, 10);
+        setValue(isNaN(v) || v < 0 ? 0 : v);
+        update();
+      });
+      value.addEventListener("blur", function () {
+        value.value = getValue();
+      });
+    } else {
+      value = document.createElement("span");
+      value.textContent = getValue();
+    }
     value.className = "value";
-    value.textContent = getValue();
 
     var plus = document.createElement("button");
     plus.type = "button";
     plus.textContent = "＋";
-    plus.setAttribute("aria-label", "増やす");
+    plus.setAttribute("aria-label", label + "を増やす");
 
     var unitEl = document.createElement("span");
     unitEl.className = "unit";
     unitEl.textContent = unit;
 
-    minus.addEventListener("click", function () {
-      setValue(Math.max(0, getValue() - 1));
-      value.textContent = getValue();
+    function setDisplayed(v) {
+      setValue(v);
+      if (editable) { value.value = v; } else { value.textContent = v; }
       update();
+    }
+    minus.addEventListener("click", function () {
+      setDisplayed(Math.max(0, getValue() - 1));
     });
     plus.addEventListener("click", function () {
-      setValue(getValue() + 1);
-      value.textContent = getValue();
-      update();
+      setDisplayed(getValue() + 1);
     });
 
     wrap.appendChild(minus);
@@ -396,6 +485,36 @@
     wrap.appendChild(plus);
     wrap.appendChild(unitEl);
     return wrap;
+  }
+
+  function renderMembers() {
+    memberList.innerHTML = "";
+    state.members.forEach(function (member) {
+      var row = document.createElement("div");
+      row.className = "member-row";
+
+      var nameWrap = document.createElement("div");
+      nameWrap.className = "member-name";
+      var icon = document.createElement("span");
+      icon.className = "icon";
+      icon.textContent = member.icon;
+      var name = document.createElement("span");
+      name.textContent = member.name;
+      nameWrap.appendChild(icon);
+      nameWrap.appendChild(name);
+
+      var stepper = makeStepper(
+        function () { return member.count; },
+        function (v) { member.count = v; },
+        "人",
+        member.name,
+        true
+      );
+
+      row.appendChild(nameWrap);
+      row.appendChild(stepper);
+      memberList.appendChild(row);
+    });
   }
 
   function renderCars() {
@@ -423,7 +542,8 @@
       var stepper = makeStepper(
         function () { return car.capacity; },
         function (v) { car.capacity = v; },
-        "人"
+        "人",
+        "乗れる人数"
       );
 
       var removeBtn = document.createElement("button");
@@ -463,7 +583,8 @@
       var stepper = makeStepper(
         function () { return other.count; },
         function (v) { other.count = v; },
-        "人"
+        "人",
+        other.name
       );
 
       row.appendChild(nameWrap);
@@ -473,14 +594,19 @@
   }
 
   function update() {
+    var total = totalPeople();
     var carSum = state.cars.reduce(function (s, c) { return s + c.capacity; }, 0);
     var otherSum = state.others.reduce(function (s, o) { return s + o.count; }, 0);
     var capacity = carSum + otherSum;
-    var diff = capacity - state.total; // マイナス＝人数がたりない
+    var diff = capacity - total; // マイナス＝人数がたりない
+
+    document.getElementById("summaryTotal").textContent = total;
+    document.getElementById("summaryBreakdown").textContent =
+      state.members.map(function (m) { return m.name + " " + m.count; }).join("・");
 
     var detail = document.getElementById("resultDetail");
     detail.innerHTML =
-      "全体 <b>" + state.total + "</b> 人<br>" +
+      "全体 <b>" + total + "</b> 人<br>" +
       "車 " + carSum + " 人（" + state.cars.length + "台） ＋ その他 " + otherSum + " 人<br>" +
       "乗れる合計 <b>" + capacity + "</b> 人";
 
@@ -506,26 +632,6 @@
     saveState();
   }
 
-  // 全体人数
-  totalInput.addEventListener("input", function () {
-    var v = parseInt(totalInput.value, 10);
-    state.total = isNaN(v) || v < 0 ? 0 : v;
-    update();
-  });
-  totalInput.addEventListener("blur", function () {
-    totalInput.value = state.total;
-  });
-  document.querySelector('[data-action="total-minus"]').addEventListener("click", function () {
-    state.total = Math.max(0, state.total - 1);
-    totalInput.value = state.total;
-    update();
-  });
-  document.querySelector('[data-action="total-plus"]').addEventListener("click", function () {
-    state.total += 1;
-    totalInput.value = state.total;
-    update();
-  });
-
   // 車を追加
   document.getElementById("addCarBtn").addEventListener("click", function () {
     state.cars.push({ name: "車" + (state.cars.length + 1), capacity: 4 });
@@ -537,14 +643,14 @@
   document.getElementById("resetBtn").addEventListener("click", function () {
     if (!confirm("すべての入力をリセットしますか？")) return;
     state = JSON.parse(JSON.stringify(defaultState));
-    totalInput.value = state.total;
+    renderMembers();
     renderCars();
     renderOthers();
     update();
   });
 
   // 初期表示
-  totalInput.value = state.total;
+  renderMembers();
   renderCars();
   renderOthers();
   update();
