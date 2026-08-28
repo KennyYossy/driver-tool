@@ -122,6 +122,15 @@
     width: 3em;
     background: var(--foam);
     color: var(--text);
+    /* 数値入力の上下スピナーを消し、＋−ボタンだけで操作させる */
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+  .stepper input.value::-webkit-outer-spin-button,
+  .stepper input.value::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
   }
   .stepper input.value:focus { outline: none; border-color: var(--sea-light); }
   .unit { font-size: 0.8rem; color: var(--muted); }
