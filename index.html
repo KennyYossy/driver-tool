@@ -92,14 +92,6 @@
     justify-content: space-between;
     gap: 10px;
   }
-  .summary-breakdown {
-    margin-top: 6px;
-    font-size: 0.72rem;
-    color: var(--muted);
-    font-variant-numeric: tabular-nums;
-  }
-  /* 開いているときは内訳の行そのものが見えるので、要約は隠す */
-  details[open] .summary-breakdown { display: none; }
   .summary-right {
     display: flex;
     align-items: center;
@@ -358,7 +350,6 @@
             <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
         </div>
-        <div class="summary-breakdown" id="summaryBreakdown"></div>
       </summary>
       <div class="member-body" id="memberList"></div>
     </details>
@@ -652,8 +643,6 @@
     var diff = capacity - total; // マイナス＝人数がたりない
 
     document.getElementById("summaryTotal").textContent = total;
-    document.getElementById("summaryBreakdown").textContent =
-      state.members.map(function (m) { return m.name + " " + m.count; }).join("・");
     // 内訳をいじって合計が変わったときも、直接入力欄を合わせておく
     if (totalStepperInput && document.activeElement !== totalStepperInput) {
       totalStepperInput.value = total;
