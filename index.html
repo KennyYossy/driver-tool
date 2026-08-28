@@ -109,11 +109,12 @@
     line-height: 1;
   }
   .chevron {
-    font-size: 1.3rem;
-    line-height: 1;
+    width: 20px;
+    height: 20px;
     color: var(--sea-light);
     margin-left: 4px;
     align-self: center;
+    flex-shrink: 0;
     transition: transform 0.2s;
   }
   details[open] .chevron { transform: rotate(180deg); }
@@ -338,7 +339,7 @@
         <div class="summary-right">
           <span class="summary-total" id="summaryTotal">0</span>
           <span class="unit">人</span>
-          <span class="chevron" aria-hidden="true">⌄</span>
+          <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
       </summary>
       <div class="member-body" id="memberList"></div>
