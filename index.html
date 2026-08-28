@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ヨット部 配車ツール</title>
+<style>
+  :root {
+    --deep: #0b3d5c;
+    --sea: #1273a6;
+    --sea-light: #3fa7d6;
+    --foam: #e8f6fb;
+    --sand: #fdf6ec;
+    --coral: #ff7b6b;
+    --seaweed: #1f9e89;
+    --card: #ffffff;
+    --text: #10394f;
+    --muted: #5b7f93;
+    --radius: 18px;
+    --shadow: 0 6px 20px rgba(11, 61, 92, 0.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    background: linear-gradient(180deg, #cfeefb 0%, #e8f6fb 40%, #fdf6ec 100%);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  .ocean-header {
+    background: linear-gradient(160deg, var(--deep) 0%, var(--sea) 60%, var(--sea-light) 100%);
+    color: #fff;
+    padding: 22px 20px 44px;
+    position: relative;
+    overflow: hidden;
+  }
+  .ocean-header h1 {
+    font-size: 1.25rem;
+    letter-spacing: 0.06em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ocean-header p {
+    margin-top: 4px;
+    font-size: 0.78rem;
+    opacity: 0.85;
+    letter-spacing: 0.04em;
+  }
+  .wave {
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    width: 100%;
+    height: 26px;
+    display: block;
+  }
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 16px 14px calc(120px + env(safe-area-inset-bottom));
+  }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--sea);
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  /* 全体人数 */
+  .total-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .total-row label { font-size: 0.95rem; font-weight: 600; }
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .stepper button {
+    width: 44px; height: 44px;
+    border: none;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+    background: var(--sea-light);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 8px rgba(18, 115, 166, 0.3);
+    transition: transform 0.08s, background 0.15s;
+    touch-action: manipulation;
+    user-select: none;
+  }
+  .stepper button:active { transform: scale(0.9); background: var(--sea); }
+  .stepper .minus { background: #9fbfd1; box-shadow: 0 3px 8px rgba(91, 127, 147, 0.3); }
+  .stepper .minus:active { background: var(--muted); }
+  .stepper .value {
+    min-width: 2.2em;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stepper input.value {
+    border: 2px solid #d7ebf4;
+    border-radius: 10px;
+    height: 44px;
+    width: 3em;
+    background: var(--foam);
+    color: var(--text);
+  }
+  .stepper input.value:focus { outline: none; border-color: var(--sea-light); }
+  .unit { font-size: 0.8rem; color: var(--muted); }
+  /* 車リスト */
+  .car-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px dashed #d7ebf4;
+  }
+  .car-row:last-of-type { border-bottom: none; }
+  .car-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    flex: 1;
+    min-width: 0;
+  }
+  .car-name .icon { font-size: 1.2rem; }
+  .car-name input {
+    border: none;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+    width: 100%;
+    min-width: 0;
+    border-bottom: 1px dashed transparent;
+  }
+  .car-name input:focus { outline: none; border-bottom-color: var(--sea-light); }
+  .remove-car {
+    border: none;
+    background: transparent;
+    color: #c9d8e0;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 6px;
+    line-height: 1;
+    touch-action: manipulation;
+  }
+  .remove-car:active { color: var(--coral); }
+  .add-car {
+    width: 100%;
+    margin-top: 12px;
+    padding: 13px;
+    border: 2px dashed var(--sea-light);
+    border-radius: 14px;
+    background: var(--foam);
+    color: var(--sea);
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.15s;
+  }
+  .add-car:active { background: #d3edf8; }
+  /* その他の移動手段 */
+  .other-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px dashed #d7ebf4;
+  }
+  .other-row:last-child { border-bottom: none; }
+  .other-name {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 0.95rem;
+  }
+  .other-name .icon { font-size: 1.2rem; }
+  /* 結果バー */
+  .result-bar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid #d7ebf4;
+    box-shadow: 0 -6px 20px rgba(11, 61, 92, 0.12);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .result-inner {
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .result-detail {
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  .result-main {
+    text-align: right;
+    font-weight: 700;
+  }
+  .result-main .label { font-size: 0.75rem; color: var(--muted); display: block; }
+  .result-main .number {
+    font-size: 1.9rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .result-main.ok .number { color: var(--seaweed); }
+  .result-main.short .number { color: var(--coral); }
+  .result-main.over .number { color: var(--sea); }
+  .status-msg {
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .result-main.ok .status-msg { color: var(--seaweed); }
+  .result-main.short .status-msg { color: var(--coral); }
+  .result-main.over .status-msg { color: var(--sea); }
+  .reset-btn {
+    display: block;
+    margin: 4px auto 0;
+    padding: 10px 24px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+</style>
+</head>
+<body>
+
+<header class="ocean-header">
+  <h1>🌊 ヨット部 配車ツール</h1>
+  <p>車とその他の移動手段で、全員乗れるかすぐ確認</p>
+  <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,30 C240,60 480,0 720,30 C960,60 1200,0 1440,30 L1440,60 L0,60 Z" fill="#cfeefb"></path>
+  </svg>
+</header>
+
+<main>
+  <!-- 全体人数 -->
+  <section class="card">
+    <div class="card-title">👥 全体の人数</div>
+    <div class="total-row">
+      <label for="totalInput">参加人数</label>
+      <div class="stepper">
+        <button type="button" class="minus" data-action="total-minus" aria-label="人数を減らす">−</button>
+        <input class="value" id="totalInput" type="number" inputmode="numeric" min="0" value="0" aria-label="全体の人数">
+        <button type="button" data-action="total-plus" aria-label="人数を増やす">＋</button>
+        <span class="unit">人</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 車 -->
+  <section class="card">
+    <div class="card-title">🚗 車（乗れる人数）</div>
+    <div id="carList"></div>
+    <button type="button" class="add-car" id="addCarBtn">＋ 車を追加</button>
+  </section>
+
+  <!-- その他の移動手段 -->
+  <section class="card">
+    <div class="card-title">⛵ その他の移動手段</div>
+    <div id="otherList"></div>
+  </section>
+
+  <button type="button" class="reset-btn" id="resetBtn">すべてリセット</button>
+</main>
+
+<!-- 結果バー -->
+<div class="result-bar">
+  <div class="result-inner">
+    <div class="result-detail" id="resultDetail"></div>
+    <div class="result-main" id="resultMain">
+      <span class="label">過不足</span>
+      <span class="number" id="remainNumber">0</span>
+      <div class="status-msg" id="statusMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var STORAGE_KEY = "haisha-tool-v1";
+
+  var defaultState = {
+    total: 0,
+    cars: [{ name: "車1", capacity: 4 }],
+    others: [
+      { key: "moped",  name: "原付",   icon: "🛵", count: 0 },
+      { key: "bus",    name: "バス",   icon: "🚌", count: 0 },
+      { key: "bike",   name: "自転車", icon: "🚲", count: 0 }
+    ]
+  };
+
+  var state = loadState();
+
+  function loadState() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.cars) && Array.isArray(parsed.others)) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(defaultState));
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  var carList = document.getElementById("carList");
+  var otherList = document.getElementById("otherList");
+  var totalInput = document.getElementById("totalInput");
+
+  function makeStepper(getValue, setValue, unit) {
+    var wrap = document.createElement("div");
+    wrap.className = "stepper";
+
+    var minus = document.createElement("button");
+    minus.type = "button";
+    minus.className = "minus";
+    minus.textContent = "−";
+    minus.setAttribute("aria-label", "減らす");
+
+    var value = document.createElement("span");
+    value.className = "value";
+    value.textContent = getValue();
+
+    var plus = document.createElement("button");
+    plus.type = "button";
+    plus.textContent = "＋";
+    plus.setAttribute("aria-label", "増やす");
+
+    var unitEl = document.createElement("span");
+    unitEl.className = "unit";
+    unitEl.textContent = unit;
+
+    minus.addEventListener("click", function () {
+      setValue(Math.max(0, getValue() - 1));
+      value.textContent = getValue();
+      update();
+    });
+    plus.addEventListener("click", function () {
+      setValue(getValue() + 1);
+      value.textContent = getValue();
+      update();
+    });
+
+    wrap.appendChild(minus);
+    wrap.appendChild(value);
+    wrap.appendChild(plus);
+    wrap.appendChild(unitEl);
+    return wrap;
+  }
+
+  function renderCars() {
+    carList.innerHTML = "";
+    state.cars.forEach(function (car, i) {
+      var row = document.createElement("div");
+      row.className = "car-row";
+
+      var nameWrap = document.createElement("div");
+      nameWrap.className = "car-name";
+      var icon = document.createElement("span");
+      icon.className = "icon";
+      icon.textContent = "🚗";
+      var nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.value = car.name;
+      nameInput.setAttribute("aria-label", "車の名前");
+      nameInput.addEventListener("input", function () {
+        car.name = nameInput.value;
+        saveState();
+      });
+      nameWrap.appendChild(icon);
+      nameWrap.appendChild(nameInput);
+
+      var stepper = makeStepper(
+        function () { return car.capacity; },
+        function (v) { car.capacity = v; },
+        "人"
+      );
+
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "remove-car";
+      removeBtn.textContent = "✕";
+      removeBtn.setAttribute("aria-label", car.name + " を削除");
+      removeBtn.addEventListener("click", function () {
+        state.cars.splice(i, 1);
+        renderCars();
+        update();
+      });
+
+      row.appendChild(nameWrap);
+      row.appendChild(stepper);
+      row.appendChild(removeBtn);
+      carList.appendChild(row);
+    });
+  }
+
+  function renderOthers() {
+    otherList.innerHTML = "";
+    state.others.forEach(function (other) {
+      var row = document.createElement("div");
+      row.className = "other-row";
+
+      var nameWrap = document.createElement("div");
+      nameWrap.className = "other-name";
+      var icon = document.createElement("span");
+      icon.className = "icon";
+      icon.textContent = other.icon;
+      var name = document.createElement("span");
+      name.textContent = other.name;
+      nameWrap.appendChild(icon);
+      nameWrap.appendChild(name);
+
+      var stepper = makeStepper(
+        function () { return other.count; },
+        function (v) { other.count = v; },
+        "人"
+      );
+
+      row.appendChild(nameWrap);
+      row.appendChild(stepper);
+      otherList.appendChild(row);
+    });
+  }
+
+  function update() {
+    var carSum = state.cars.reduce(function (s, c) { return s + c.capacity; }, 0);
+    var otherSum = state.others.reduce(function (s, o) { return s + o.count; }, 0);
+    var capacity = carSum + otherSum;
+    var diff = capacity - state.total; // マイナス＝人数がたりない
+
+    var detail = document.getElementById("resultDetail");
+    detail.innerHTML =
+      "全体 <b>" + state.total + "</b> 人<br>" +
+      "車 " + carSum + " 人（" + state.cars.length + "台） ＋ その他 " + otherSum + " 人<br>" +
+      "乗れる合計 <b>" + capacity + "</b> 人";
+
+    var main = document.getElementById("resultMain");
+    var num = document.getElementById("remainNumber");
+    var msg = document.getElementById("statusMsg");
+
+    main.classList.remove("ok", "short", "over");
+    if (diff < 0) {
+      num.textContent = "−" + (-diff);
+      main.classList.add("short");
+      msg.textContent = "あと " + (-diff) + " 人分たりません";
+    } else if (diff === 0) {
+      num.textContent = "±0";
+      main.classList.add("ok");
+      msg.textContent = "ぴったり全員乗れます 🐬";
+    } else {
+      num.textContent = "+" + diff;
+      main.classList.add("over");
+      msg.textContent = diff + " 人分の余裕があります";
+    }
+
+    saveState();
+  }
+
+  // 全体人数
+  totalInput.addEventListener("input", function () {
+    var v = parseInt(totalInput.value, 10);
+    state.total = isNaN(v) || v < 0 ? 0 : v;
+    update();
+  });
+  totalInput.addEventListener("blur", function () {
+    totalInput.value = state.total;
+  });
+  document.querySelector('[data-action="total-minus"]').addEventListener("click", function () {
+    state.total = Math.max(0, state.total - 1);
+    totalInput.value = state.total;
+    update();
+  });
+  document.querySelector('[data-action="total-plus"]').addEventListener("click", function () {
+    state.total += 1;
+    totalInput.value = state.total;
+    update();
+  });
+
+  // 車を追加
+  document.getElementById("addCarBtn").addEventListener("click", function () {
+    state.cars.push({ name: "車" + (state.cars.length + 1), capacity: 4 });
+    renderCars();
+    update();
+  });
+
+  // リセット
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    if (!confirm("すべての入力をリセットしますか？")) return;
+    state = JSON.parse(JSON.stringify(defaultState));
+    totalInput.value = state.total;
+    renderCars();
+    renderOthers();
+    update();
+  });
+
+  // 初期表示
+  totalInput.value = state.total;
+  renderCars();
+  renderOthers();
+  update();
+})();
+</script>
+</body>
+</html>
