@@ -322,13 +322,75 @@
     cursor: pointer;
     touch-action: manipulation;
   }
+  /* ヘッダーのボタン */
+  .header-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .header-btn {
+    padding: 7px 13px;
+    border: none;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--sea);
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .header-btn.subtle {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    font-weight: 400;
+  }
+  .header-btn:active { transform: scale(0.94); }
+  /* 画像出力のプレビュー */
+  .shot-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 61, 92, 0.6);
+    backdrop-filter: blur(3px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 20px;
+    z-index: 50;
+  }
+  .shot-overlay img {
+    max-width: 100%;
+    max-height: 66vh;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  }
+  .shot-hint {
+    color: #fff;
+    font-size: 0.78rem;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .shot-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .shot-actions button, .shot-actions a {
+    padding: 11px 20px;
+    border: none;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--sea);
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .shot-actions .ghost { background: rgba(255, 255, 255, 0.2); color: #fff; }
 </style>
 </head>
 <body>
 
 <header class="ocean-header">
   <h1>🌊 ヨット部 配車ツール</h1>
-  <button type="button" class="reset-btn" id="resetBtn">リセット</button>
+  <div class="header-actions">
+    <button type="button" class="header-btn" id="shotBtn">画像</button>
+    <button type="button" class="header-btn subtle" id="resetBtn">リセット</button>
+  </div>
   <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true">
     <path d="M0,30 C240,60 480,0 720,30 C960,60 1200,0 1440,30 L1440,60 L0,60 Z" fill="#cfeefb"></path>
   </svg>
@@ -705,6 +767,219 @@
   renderCars();
   renderOthers();
   update();
+
+  // ===== まとめを1枚の画像にする =====
+  var FONT = '"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif';
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // 描く行を先に組み立てて、必要な高さを決めてから描画する
+  function buildLines() {
+    var lines = [];
+    var total = totalPeople();
+    var used = state.members.filter(function (m) { return m.count > 0; });
+
+    lines.push({ type: "section", text: "全体の人数" });
+    lines.push({ type: "row", label: "参加人数", value: total + " 人", strong: true });
+    used.forEach(function (m) {
+      lines.push({ type: "sub", label: m.icon + " " + m.name, value: m.count + " 人" });
+    });
+
+    lines.push({ type: "section", text: "車" });
+    if (state.cars.length === 0) {
+      lines.push({ type: "sub", label: "（なし）", value: "" });
+    } else {
+      state.cars.forEach(function (c) {
+        lines.push({ type: "row", label: "🚗 " + (c.name || "車"), value: c.capacity + " 人" });
+      });
+    }
+
+    var others = state.others.filter(function (o) { return o.count > 0; });
+    if (others.length) {
+      lines.push({ type: "section", text: "その他の移動手段" });
+      others.forEach(function (o) {
+        lines.push({ type: "row", label: o.icon + " " + o.name, value: o.count + " 人" });
+      });
+    }
+    return lines;
+  }
+
+  function drawSummary() {
+    var W = 720, PAD = 36, HEAD = 104;
+    var lines = buildLines();
+
+    var lineH = function (t) {
+      return t === "section" ? 46 : (t === "sub" ? 32 : 42);
+    };
+    var body = lines.reduce(function (s, l) { return s + lineH(l.type); }, 0);
+    var FOOT = 168;
+    var H = HEAD + 16 + body + FOOT;
+
+    var dpr = 2;
+    var cv = document.createElement("canvas");
+    cv.width = W * dpr; cv.height = H * dpr;
+    var ctx = cv.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.textBaseline = "middle";
+
+    // 背景
+    var bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#e8f6fb");
+    bg.addColorStop(1, "#fdf6ec");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // ヘッダー
+    var hg = ctx.createLinearGradient(0, 0, W, HEAD);
+    hg.addColorStop(0, "#0b3d5c");
+    hg.addColorStop(0.6, "#1273a6");
+    hg.addColorStop(1, "#3fa7d6");
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, 0, W, HEAD);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 30px " + FONT;
+    ctx.textAlign = "left";
+    ctx.fillText("🌊 ヨット部 配車まとめ", PAD, HEAD / 2);
+
+    var d = new Date();
+    ctx.font = "20px " + FONT;
+    ctx.textAlign = "right";
+    ctx.fillText((d.getMonth() + 1) + "/" + d.getDate(), W - PAD, HEAD / 2);
+
+    // 本文
+    var y = HEAD + 16;
+    lines.forEach(function (l) {
+      var h = lineH(l.type);
+      if (l.type === "section") {
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#1273a6";
+        ctx.font = "bold 20px " + FONT;
+        ctx.fillText(l.text, PAD, y + h / 2 + 4);
+      } else {
+        var isSub = l.type === "sub";
+        ctx.textAlign = "left";
+        ctx.fillStyle = isSub ? "#5b7f93" : "#10394f";
+        ctx.font = (l.strong ? "bold " : "") + (isSub ? "20px " : "24px ") + FONT;
+        ctx.fillText(l.label, PAD + (isSub ? 22 : 8), y + h / 2);
+        ctx.textAlign = "right";
+        ctx.font = (l.strong ? "bold 26px " : (isSub ? "20px " : "24px ")) + FONT;
+        ctx.fillText(l.value, W - PAD, y + h / 2);
+      }
+      y += h;
+    });
+
+    // 結果
+    var carSum = state.cars.reduce(function (s, c) { return s + c.capacity; }, 0);
+    var otherSum = state.others.reduce(function (s, o) { return s + o.count; }, 0);
+    var capacity = carSum + otherSum;
+    var diff = capacity - totalPeople();
+
+    var boxY = H - FOOT + 8, boxH = FOOT - 28;
+    ctx.fillStyle = "#fff";
+    roundRect(ctx, PAD - 12, boxY, W - (PAD - 12) * 2, boxH, 16);
+    ctx.fill();
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#5b7f93";
+    ctx.font = "20px " + FONT;
+    ctx.fillText("乗れる合計", PAD + 8, boxY + 34);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#10394f";
+    ctx.font = "bold 24px " + FONT;
+    ctx.fillText(capacity + " 人", W - PAD, boxY + 34);
+
+    var color = diff < 0 ? "#ff7b6b" : (diff === 0 ? "#1f9e89" : "#1273a6");
+    var big = diff < 0 ? "−" + (-diff) : (diff === 0 ? "±0" : "+" + diff);
+    var msg = diff < 0 ? "あと " + (-diff) + " 人分たりません"
+            : (diff === 0 ? "ぴったり全員乗れます" : diff + " 人分の余裕があります");
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#5b7f93";
+    ctx.font = "20px " + FONT;
+    ctx.fillText("過不足", PAD + 8, boxY + 88);
+    ctx.textAlign = "right";
+    ctx.fillStyle = color;
+    ctx.font = "bold 44px " + FONT;
+    ctx.fillText(big, W - PAD, boxY + 88);
+    ctx.font = "bold 19px " + FONT;
+    ctx.fillText(msg, W - PAD, boxY + 122);
+
+    return cv;
+  }
+
+  function openShot() {
+    var cv = drawSummary();
+    var url = cv.toDataURL("image/png");
+    var d = new Date();
+    var name = "haisha-" + d.getFullYear() +
+      ("0" + (d.getMonth() + 1)).slice(-2) + ("0" + d.getDate()).slice(-2) + ".png";
+
+    // 共有用のファイルを先に用意しておく
+    var shotFile = null;
+    if (cv.toBlob) {
+      cv.toBlob(function (blob) {
+        try { shotFile = new File([blob], name, { type: "image/png" }); } catch (e) {}
+      });
+    }
+    var ov = document.createElement("div");
+    ov.className = "shot-overlay";
+
+    var img = document.createElement("img");
+    img.src = url;
+    img.alt = "配車まとめ";
+
+    var hint = document.createElement("div");
+    hint.className = "shot-hint";
+    hint.textContent = "画像を長押しすると保存・共有できます";
+
+    var actions = document.createElement("div");
+    actions.className = "shot-actions";
+
+    // 共有（対応端末のみ）。LINE などにそのまま送れる。
+    if (navigator.canShare) {
+      var shareBtn = document.createElement("button");
+      shareBtn.type = "button";
+      shareBtn.textContent = "共有";
+      // iOS は共有をタップと同じ処理の中で呼ぶ必要があるため、
+      // ファイルはあらかじめ作っておき、タップ時は同期的に share() する。
+      shareBtn.addEventListener("click", function () {
+        if (shotFile && navigator.canShare({ files: [shotFile] })) {
+          navigator.share({ files: [shotFile] }).catch(function () {});
+        }
+      });
+      actions.appendChild(shareBtn);
+    }
+
+    var dl = document.createElement("a");
+    dl.textContent = "保存";
+    dl.href = url;
+    dl.download = name;
+    actions.appendChild(dl);
+
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "ghost";
+    close.textContent = "閉じる";
+    close.addEventListener("click", function () { ov.remove(); });
+    actions.appendChild(close);
+
+    ov.appendChild(img);
+    ov.appendChild(hint);
+    ov.appendChild(actions);
+    ov.addEventListener("click", function (e) { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+  }
+
+  document.getElementById("shotBtn").addEventListener("click", openShot);
 })();
 </script>
 </body>
