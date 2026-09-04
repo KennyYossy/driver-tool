@@ -381,6 +381,26 @@
     touch-action: manipulation;
   }
   .shot-actions .ghost { background: rgba(255, 255, 255, 0.2); color: #fff; }
+  .shot-date {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+  .shot-date input {
+    width: 9em;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+    text-align: center;
+  }
+  .shot-date input:focus { outline: 2px solid var(--sea-light); }
 </style>
 </head>
 <body>
@@ -388,7 +408,7 @@
 <header class="ocean-header">
   <h1>🌊 ヨット部 配車ツール</h1>
   <div class="header-actions">
-    <button type="button" class="header-btn" id="shotBtn">画像</button>
+    <button type="button" class="header-btn" id="shotBtn">共有</button>
     <button type="button" class="header-btn subtle" id="resetBtn">リセット</button>
   </div>
   <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true">
@@ -812,7 +832,7 @@
     return lines;
   }
 
-  function drawSummary() {
+  function drawSummary(dateLabel) {
     var W = 720, PAD = 36, HEAD = 104;
     var lines = buildLines();
 
@@ -850,10 +870,9 @@
     ctx.textAlign = "left";
     ctx.fillText("🌊 ヨット部 配車まとめ", PAD, HEAD / 2);
 
-    var d = new Date();
     ctx.font = "20px " + FONT;
     ctx.textAlign = "right";
-    ctx.fillText((d.getMonth() + 1) + "/" + d.getDate(), W - PAD, HEAD / 2);
+    ctx.fillText(dateLabel, W - PAD, HEAD / 2);
 
     // 本文
     var y = HEAD + 16;
@@ -917,38 +936,60 @@
   }
 
   function openShot() {
-    var cv = drawSummary();
-    var url = cv.toDataURL("image/png");
-    var d = new Date();
-    var name = "haisha-" + d.getFullYear() +
-      ("0" + (d.getMonth() + 1)).slice(-2) + ("0" + d.getDate()).slice(-2) + ".png";
+    var today = new Date();
+    var label = (today.getMonth() + 1) + "/" + today.getDate();
+    var cv, shotFile;
 
-    // 共有用のファイルを先に用意しておく
-    var shotFile = null;
-    if (cv.toBlob) {
-      cv.toBlob(function (blob) {
-        try { shotFile = new File([blob], name, { type: "image/png" }); } catch (e) {}
-      });
-    }
     var ov = document.createElement("div");
     ov.className = "shot-overlay";
 
+    // 日付は自由に書き換えられる（「9/6 合宿」のような書き方もできる）
+    var dateRow = document.createElement("div");
+    dateRow.className = "shot-date";
+    var dateLabelEl = document.createElement("label");
+    dateLabelEl.textContent = "日付";
+    dateLabelEl.setAttribute("for", "shotDateInput");
+    var dateInput = document.createElement("input");
+    dateInput.type = "text";
+    dateInput.id = "shotDateInput";
+    dateInput.value = label;
+    dateInput.setAttribute("aria-label", "画像に入れる日付");
+    dateRow.appendChild(dateLabelEl);
+    dateRow.appendChild(dateInput);
+
     var img = document.createElement("img");
-    img.src = url;
     img.alt = "配車まとめ";
 
     var hint = document.createElement("div");
     hint.className = "shot-hint";
-    hint.textContent = "画像を長押しすると保存・共有できます";
+    hint.textContent = "画像を長押しすると保存できます";
 
     var actions = document.createElement("div");
     actions.className = "shot-actions";
+
+    // 描き直して、表示と共有用ファイルの両方を差し替える
+    function render() {
+      cv = drawSummary(dateInput.value);
+      img.src = cv.toDataURL("image/png");
+      shotFile = null;
+      if (cv.toBlob) {
+        cv.toBlob(function (blob) {
+          try {
+            shotFile = new File([blob], "haisha-" + today.getFullYear() +
+              ("0" + (today.getMonth() + 1)).slice(-2) +
+              ("0" + today.getDate()).slice(-2) + ".png", { type: "image/png" });
+          } catch (e) {}
+        });
+      }
+    }
+    dateInput.addEventListener("input", render);
+    render();
 
     // 共有（対応端末のみ）。LINE などにそのまま送れる。
     if (navigator.canShare) {
       var shareBtn = document.createElement("button");
       shareBtn.type = "button";
-      shareBtn.textContent = "共有";
+      shareBtn.textContent = "共有する";
       // iOS は共有をタップと同じ処理の中で呼ぶ必要があるため、
       // ファイルはあらかじめ作っておき、タップ時は同期的に share() する。
       shareBtn.addEventListener("click", function () {
@@ -959,12 +1000,6 @@
       actions.appendChild(shareBtn);
     }
 
-    var dl = document.createElement("a");
-    dl.textContent = "保存";
-    dl.href = url;
-    dl.download = name;
-    actions.appendChild(dl);
-
     var close = document.createElement("button");
     close.type = "button";
     close.className = "ghost";
@@ -972,6 +1007,7 @@
     close.addEventListener("click", function () { ov.remove(); });
     actions.appendChild(close);
 
+    ov.appendChild(dateRow);
     ov.appendChild(img);
     ov.appendChild(hint);
     ov.appendChild(actions);
